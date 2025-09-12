@@ -2,9 +2,24 @@
 #include <vector>
 #include <iostream>
 #include <sstream>
+#include <conio.h>
+
+//TODO
+//Track move history
+//Allow selection with cursor
+//Multiplayer?
 
 #define BOARD_SIZE 3
 int playSpace[BOARD_SIZE][BOARD_SIZE];
+
+#define RETURN_KEY 13
+#define ARROW_BEGIN 224
+#define ARROW_UP 72
+#define ARROW_DOWN 80
+#define ARROW_LEFT 75
+#define ARROW_RIGHT 77
+
+int cursorX = 0, cursorY = 0;
 
 enum MOVE
 {
@@ -57,17 +72,17 @@ std::string GetSpaceFromHighestVal(int currVal)
 	sprintf_s(bufB, "%d", currVal);
 	std::string ret;
 
-	for (int i = 0; i < 2 + (strlen(bufA) - strlen(bufB)); i++)
+	for (int i = 0; i < 1 + (strlen(bufA) - strlen(bufB)); i++)
 	{
 		ret.append(" ");
 	}
 
-	if (ret.length() + strlen(bufB) <= 3)
+	if (ret.length() + strlen(bufB) <= 2)
 	{
 		ret.clear();
-		int amount = 4 - strlen(bufB);
+		int amount = 3 - strlen(bufB);
 
-		for(int i = 0; i < amount; i++)
+		for (int i = 0; i < amount; i++)
 		{
 			ret.append(" ");
 		}
@@ -86,7 +101,7 @@ void PrintBoard()
 
 	for (int x = 0; x < BOARD_SIZE; x++)
 	{
-		std::cout << x + 1 << " ";
+		std::cout << x + 1 << "  ";
 	}
 
 	std::cout << std::endl;
@@ -101,6 +116,10 @@ void PrintBoard()
 		for (int x = 0; x < BOARD_SIZE; x++)
 		{
 			MOVE blockState = (MOVE)playSpace[y][x];
+			bool isCursor = (x == cursorX && y == cursorY);
+
+			std::cout << (isCursor ? "[" : " ");
+
 			switch (blockState)
 			{
 				case MOVE::NONE:
@@ -122,7 +141,16 @@ void PrintBoard()
 				}
 			}
 
-			std::cout << DynamicSpace(x + 2);
+			std::string dynamicSpace = DynamicSpace(x + 2);
+
+			if (isCursor)
+			{
+				dynamicSpace.pop_back(); //Remove a space as we have a ]
+				std::cout << "]";
+
+			}
+
+			std::cout << dynamicSpace;
 		}
 
 		std::cout << std::endl;
@@ -146,7 +174,7 @@ ADJACENT_TYPE GetAdjacentType(Vec2& a, Vec2& b)
 
 bool IsAdjacent(Vec2& a, Vec2& b)
 {
-	return (abs(a.x - b.x) == 1 || abs(a.y - b.y == 1))
+	return (abs(a.x - b.x) == 1 || abs(a.y - b.y) == 1)
 		&& !(a.x == b.x && a.y == b.y);
 }
 
@@ -190,10 +218,10 @@ bool IsValidVec2(Vec2& v2)
 	return m == MOVE::NONE;
 }
 
-bool TraceAdjacent(Vec2 start, MOVE type, int xDir, int yDir, int& count)
+bool TraceAdjacent(Vec2 start, MOVE type, Vec2* dir, int& count)
 {
 	//No direction, we're starting out
-	if (xDir == 99 && yDir == 99)
+	if (!dir)
 	{
 		Vec2 allDirs[]
 		{
@@ -219,9 +247,12 @@ bool TraceAdjacent(Vec2 start, MOVE type, int xDir, int yDir, int& count)
 
 			if (playSpace[next.y][next.x] == type)
 			{
+				//We're not leaving scope so we can pass a heap ptr
+				Vec2 newDir(allDirs[i].x, allDirs[i].y);
+
 				//Trace this route
 				count++;
-				TraceAdjacent(next, type, allDirs[i].x, allDirs[i].y, count);
+				TraceAdjacent(next, type, &newDir, count);
 
 				if (count >= BOARD_SIZE - 1)
 				{
@@ -233,17 +264,6 @@ bool TraceAdjacent(Vec2 start, MOVE type, int xDir, int yDir, int& count)
 					highestAdj = count;
 				}
 
-				//If we're now going in the opposite dir, don't reset the count as it's still adjacent
-				if (i + 1 < sizeof(allDirs[0]))
-				{
-					Vec2 v = allDirs[i + 1];
-
-					if (v.x == -next.x && v.y == -next.y)
-					{
-						continue;
-					}
-				}
-
 				count = 0;
 			}
 		}
@@ -252,7 +272,7 @@ bool TraceAdjacent(Vec2 start, MOVE type, int xDir, int yDir, int& count)
 	}
 	else
 	{
-		Vec2 next(start.x + xDir, start.y + yDir);
+		Vec2 next(start.x + dir->x, start.y + dir->y);
 		if (!IsValid(next.x) || !IsValid(next.y))
 		{
 			return false;
@@ -262,16 +282,17 @@ bool TraceAdjacent(Vec2 start, MOVE type, int xDir, int yDir, int& count)
 		{
 			//Trace this route
 			count++;
-			TraceAdjacent(next, type, xDir, yDir, count);
+			TraceAdjacent(next, type, dir, count);
 		}
 	}
 
 	return false;
 }
 
-bool GameOver()
+bool GameOver(MOVE& winningMove)
 {
 	//See if BOARD_SIZE amount of same type is adjacent
+	bool remainingMoves = false;
 
 	for (int x = 0; x < BOARD_SIZE; x++)
 	{
@@ -281,18 +302,38 @@ bool GameOver()
 
 			if (move == MOVE::NONE)
 			{
+				remainingMoves = true;
 				continue;
 			}
 
 			Vec2 movePos = Vec2(x, y);
 
 			int adjCount = 0;
-			if (TraceAdjacent(movePos, move, 99, 99, adjCount))
+			if (TraceAdjacent(movePos, move, nullptr, adjCount))
 			{
+				winningMove = move;
 				return true;
 			}
 
 			//std::cout << "Pos X:" << x + 1 << " Y:" << y + 1 << " has max adjacent count : " << adjCount << std::endl;
+		}
+	}
+
+	return !remainingMoves;
+}
+
+bool RemainingMoves()
+{
+	for (int x = 0; x < BOARD_SIZE; x++)
+	{
+		for (int y = 0; y < BOARD_SIZE; y++)
+		{
+			MOVE move = (MOVE)playSpace[y][x];
+
+			if (move == MOVE::NONE)
+			{
+				return true;
+			}
 		}
 	}
 
@@ -349,7 +390,7 @@ bool PlayAIMove()
 	{
 		//Choose a random one from options
 
-		Vec2* move = options.size() > 1 ? &options[rand() % (options.size() - 1)]
+		Vec2* move = options.size() > 1 ? &options[rand() % (options.size())]
 			: &options[0];
 		PlayVec2(move, MOVE::O);
 
@@ -357,7 +398,7 @@ bool PlayAIMove()
 	else
 	{
 		//Pick random from the priority vec
-		Vec2* move = priority.size() > 1 ? &priority[rand() % (priority.size() - 1)]
+		Vec2* move = priority.size() > 1 ? &priority[rand() % (priority.size())]
 			: &priority[0];
 
 		PlayVec2(move, MOVE::O);
@@ -366,44 +407,128 @@ bool PlayAIMove()
 	return true;
 }
 
-int GetValidIntInput(std::string promptStr)
+//int GetValidIntInput(std::string promptStr)
+//{
+//	std::cout << promptStr << " ";
+//	std::vector<int> inputList;
+//
+//	while (true)
+//	{
+//		int input = getchar();
+//
+//		if (input != EOF && input != '\n')
+//		{
+//			int ret = input - '0';
+//			inputList.push_back(ret);
+//		}
+//		else
+//		{
+//			//Convert to full int
+//			std::stringstream ss;
+//			for (int i : inputList)
+//			{
+//				ss << i;
+//			}
+//
+//			int ret = atoi(ss.str().c_str());
+//			ret--; //User input of 1 == 0 internal index 
+//
+//			if (IsValid(ret))
+//			{
+//				return ret;
+//			}
+//			else
+//			{
+//				std::cout << "Invalid input!" << std::endl;
+//				std::cout << promptStr << " ";
+//				inputList.clear();
+//			}
+//		}
+//	}
+//}
+
+//Returns true when enter is pressed
+bool RunCursor()
 {
-	std::cout << promptStr << " ";
-	std::vector<int> inputList;
+	int input = _getch();
 
-	while(true)
+	if(input == RETURN_KEY)
 	{
-		int input = getchar();
+		return true;
+	}
 
-		if (input != EOF && input != '\n')
+	if (input == ARROW_BEGIN)
+	{
+		input = _getch();
+
+		int potentialX = cursorX;
+		int potentialY = cursorY;
+
+		switch (input)
 		{
-			int ret = input - '0';
-			inputList.push_back(ret);
+			case ARROW_UP:
+			{
+				potentialY--;
+				break;
+			}
+			case ARROW_DOWN:
+			{
+				potentialY++;
+				break;
+			}
+			case ARROW_LEFT:
+			{
+				potentialX--;
+				break;
+			}
+			case ARROW_RIGHT:
+			{
+				potentialX++;
+				break;
+			}
 		}
-		else
+
+		if (IsValid(potentialX) && IsValid(potentialY))
 		{
-			//Convert to full int
-			std::stringstream ss;
-			for (int i : inputList)
-			{
-				ss << i;
-			}
+			cursorX = potentialX;
+			cursorY = potentialY;
 
-			int ret = atoi(ss.str().c_str());
-			ret--; //User input of 1 == 0 internal index 
-
-			if (IsValid(ret))
-			{
-				return ret;
-			}
-			else
-			{
-				std::cout << "Invalid input!" << std::endl;
-				std::cout << promptStr << " ";
-				inputList.clear();
-			}
+			PrintBoard();
 		}
 	}
+
+	return false;
+}
+
+bool CheckGameOver()
+{
+	MOVE winningMove = MOVE::NONE;
+	if (GameOver(winningMove))
+	{
+		switch (winningMove)
+		{
+			case MOVE::NONE:
+			{
+				std::cout << "It's a draw!" << std::endl;
+				break;
+			}
+			case MOVE::O:
+			{
+				std::cout << "You've lost! Better luck next time..." << std::endl;
+				break;
+			}
+			case MOVE::X:
+			{
+				std::cout << "You've won! Congratulations!" << std::endl;
+
+				break;
+			}
+		}
+
+		return true;
+	}
+
+	return false;
 }
 
 int main()
@@ -421,48 +546,33 @@ int main()
 
 	while (true)
 	{
-		bool aiResult = PlayAIMove();
-
+		PlayAIMove();
 		PrintBoard();
-
-		if (GameOver() || !aiResult)
+		if(CheckGameOver())
 		{
-			//AI has won
-			std::cout << "You've lost! Better luck next time..." << std::endl;
 			break;
 		}
 
-		//Take X Input
-		//Take Y input
-		//Plot (if pos is valid)
-		//Run AI move
-		//Evaluate game
-		//If no winner, go again
-		int x = -1, y = -1;
-
 		std::cout << std::endl;
 
-		while(true)
+		while (true)
 		{
-			x = GetValidIntInput("Enter X pos:");
-			y = GetValidIntInput("Enter Y pos:");
-			Vec2 v2(x, y);
-
-			if (IsValidVec2(v2))
+			if(RunCursor())
 			{
-				break;
-			}
+				Vec2 v2(cursorX, cursorY);
 
-			std::cout << "Invalid input!" << std::endl;
+				if (IsValidVec2(v2))
+				{
+					break;
+				}
+			}
 		}
 
-		playSpace[y][x] = MOVE::X;
-		PrintBoard();
+		playSpace[cursorY][cursorX] = MOVE::X;
 
-		if (GameOver())
+		PrintBoard();
+		if (CheckGameOver())
 		{
-			//Player has won
-			std::cout << "You've won! Congratulations!" << std::endl;
 			break;
 		}
 	}
