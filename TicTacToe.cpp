@@ -4,13 +4,12 @@
 #include <sstream>
 #include <conio.h>
 
-//TODO
-//Track move history
-//Allow selection with cursor
-//Multiplayer?
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 
-#define BOARD_SIZE 16
-int playSpace[BOARD_SIZE][BOARD_SIZE];
+int* playSpace;
+
+#define MIN_BOARD_SIZE 3
 
 #define RETURN_KEY 13
 #define ARROW_BEGIN 224
@@ -20,8 +19,10 @@ int playSpace[BOARD_SIZE][BOARD_SIZE];
 #define ARROW_RIGHT 77
 
 //#define PRINT_GRID
+#define BEEP
 
 int cursorX = 0, cursorY = 0;
+int boardSize = MIN_BOARD_SIZE;
 
 enum MOVE
 {
@@ -50,6 +51,11 @@ public:
 	}
 };
 
+size_t BoardIndex(int x, int y)
+{
+	return x + boardSize * y;
+}
+
 std::string DynamicSpace(int input)
 {
 	char buf[256];
@@ -70,7 +76,7 @@ std::string GetSpaceFromHighestVal(int currVal)
 	char bufA[256];
 	char bufB[256];
 
-	sprintf_s(bufA, "%d", BOARD_SIZE);
+	sprintf_s(bufA, "%d", boardSize);
 	sprintf_s(bufB, "%d", currVal);
 	std::string ret;
 
@@ -101,7 +107,7 @@ void PrintBoard()
 	std::cout << "  X ";
 
 	//Print the top board values
-	for (int x = 0; x < BOARD_SIZE; x++)
+	for (int x = 0; x < boardSize; x++)
 	{
 		std::cout << x + 1 << "  ";
 	}
@@ -112,7 +118,7 @@ void PrintBoard()
 
 	std::cout << std::endl;
 
-	for (int y = 0; y < BOARD_SIZE; y++)
+	for (int y = 0; y < boardSize; y++)
 	{
 		//Print the side board values
 #ifdef PRINT_GRID
@@ -120,9 +126,9 @@ void PrintBoard()
 #else
 		std::cout << " ";
 #endif
-		for (int x = 0; x < BOARD_SIZE; x++)
+		for (int x = 0; x < boardSize; x++)
 		{
-			MOVE blockState = (MOVE)playSpace[y][x];
+			MOVE blockState = (MOVE)playSpace[BoardIndex(x, y)];
 			bool isCursor = (x == cursorX && y == cursorY);
 
 			std::cout << (isCursor ? "[" : " ");
@@ -193,11 +199,11 @@ std::vector<Vec2> GetExistingMoves(MOVE type)
 {
 	std::vector<Vec2> ret;
 
-	for (int y = 0; y < BOARD_SIZE; y++)
+	for (int y = 0; y < boardSize; y++)
 	{
-		for (int x = 0; x < BOARD_SIZE; x++)
+		for (int x = 0; x < boardSize; x++)
 		{
-			if (playSpace[y][x] == type)
+			if (playSpace[BoardIndex(x, y)] == type)
 			{
 				ret.push_back(Vec2(x, y));
 			}
@@ -209,12 +215,12 @@ std::vector<Vec2> GetExistingMoves(MOVE type)
 
 void PlayVec2(Vec2* v2, MOVE type)
 {
-	playSpace[v2->y][v2->x] = type;
+	playSpace[BoardIndex(v2->x, v2->y)] = type;
 }
 
 bool IsValid(int pos)
 {
-	return pos >= 0 && pos < BOARD_SIZE;
+	return pos >= 0 && pos < boardSize;
 }
 
 bool IsValidVec2(Vec2& v2)
@@ -224,7 +230,7 @@ bool IsValidVec2(Vec2& v2)
 		return false;
 	}
 
-	MOVE m = (MOVE)playSpace[v2.y][v2.x];
+	MOVE m = (MOVE)playSpace[BoardIndex(v2.x, v2.y)];
 
 	return m == MOVE::NONE;
 }
@@ -256,16 +262,16 @@ bool TraceAdjacent(Vec2 start, MOVE type, Vec2* dir, int& count)
 				continue;
 			}
 
-			if (playSpace[next.y][next.x] == type)
+			if (playSpace[BoardIndex(next.x, next.y)] == type)
 			{
-				//We're not leaving scope so we can pass a heap ptr
+				//We're not leaving scope so we can pass a stack ptr
 				Vec2 newDir(allDirs[i].x, allDirs[i].y);
 
 				//Trace this route
 				count++;
 				TraceAdjacent(next, type, &newDir, count);
 
-				if (count >= BOARD_SIZE - 1)
+				if (count >= boardSize - 1)
 				{
 					return true;
 				}
@@ -289,7 +295,7 @@ bool TraceAdjacent(Vec2 start, MOVE type, Vec2* dir, int& count)
 			return false;
 		}
 
-		if (playSpace[next.y][next.x] == type)
+		if (playSpace[BoardIndex(next.x, next.y)] == type)
 		{
 			//Trace this route
 			count++;
@@ -305,11 +311,11 @@ bool GameOver(MOVE& winningMove)
 	//See if BOARD_SIZE amount of same type is adjacent
 	bool remainingMoves = false;
 
-	for (int x = 0; x < BOARD_SIZE; x++)
+	for (int x = 0; x < boardSize; x++)
 	{
-		for (int y = 0; y < BOARD_SIZE; y++)
+		for (int y = 0; y < boardSize; y++)
 		{
-			MOVE move = (MOVE)playSpace[y][x];
+			MOVE move = (MOVE)playSpace[BoardIndex(x, y)];
 
 			if (move == MOVE::NONE)
 			{
@@ -335,11 +341,11 @@ bool GameOver(MOVE& winningMove)
 
 bool RemainingMoves()
 {
-	for (int x = 0; x < BOARD_SIZE; x++)
+	for (int x = 0; x < boardSize; x++)
 	{
-		for (int y = 0; y < BOARD_SIZE; y++)
+		for (int y = 0; y < boardSize; y++)
 		{
-			MOVE move = (MOVE)playSpace[y][x];
+			MOVE move = (MOVE)playSpace[BoardIndex(x, y)];
 
 			if (move == MOVE::NONE)
 			{
@@ -359,9 +365,9 @@ bool PlayAIMove()
 
 	std::vector<Vec2> options;
 
-	for (int y = 0; y < BOARD_SIZE; y++)
+	for (int y = 0; y < boardSize; y++)
 	{
-		for (int x = 0; x < BOARD_SIZE; x++)
+		for (int x = 0; x < boardSize; x++)
 		{
 			Vec2 v2 = Vec2(x, y);
 
@@ -463,7 +469,7 @@ bool RunCursor()
 {
 	int input = _getch();
 
-	if(input == RETURN_KEY)
+	if (input == RETURN_KEY)
 	{
 		return true;
 	}
@@ -521,17 +527,37 @@ bool CheckGameOver()
 			case MOVE::NONE:
 			{
 				std::cout << "It's a draw!" << std::endl;
+
+#ifdef BEEP
+				Beep(500, 150);
+				Beep(800, 200);
+				Beep(650, 600);
+#endif
 				break;
 			}
 			case MOVE::O:
 			{
 				std::cout << "You've lost! Better luck next time..." << std::endl;
+#ifdef BEEP
+				Beep(800, 200);
+				Beep(600, 200);
+				Beep(580, 200);
+				Beep(500, 800);
+#endif
 				break;
 			}
 			case MOVE::X:
 			{
 				std::cout << "You've won! Congratulations!" << std::endl;
 
+#ifdef BEEP
+				Beep(500, 120);
+				Beep(600, 120);
+				Beep(700, 120);
+				Beep(800, 300);
+				Beep(650, 120);
+				Beep(800, 800);
+#endif
 				break;
 			}
 		}
@@ -542,16 +568,68 @@ bool CheckGameOver()
 	return false;
 }
 
-int main()
+void AllocBoard(int size)
 {
+	playSpace = new int[size * size];
+}
+
+bool BoardAllocated()
+{
+	return playSpace;
+}
+
+int main(int argc, char** argv)
+{
+	//Get the board size from commnad line args
+	for (int i = 0; i < argc; i++)
+	{
+		if (!strncmp(*argv, "-boardsize", 10))
+		{
+			char* sizeStart = strchr(*argv, '=');
+
+			if (sizeStart && sizeStart + 1)
+			{
+				++sizeStart;
+
+				std::string boardSizeStr;
+
+				while (*sizeStart != '\0')
+				{
+					boardSizeStr.append(sizeStart);
+					++sizeStart;
+				}
+
+				boardSizeStr.pop_back();
+				int finalSize = atoi(boardSizeStr.c_str());
+				boardSize = finalSize;
+
+				break;
+			}
+		}
+
+		++argv;
+	}
+
+	if (boardSize < MIN_BOARD_SIZE)
+	{
+		boardSize = MIN_BOARD_SIZE;
+	}
+
+	AllocBoard(boardSize);
+
+	if (!BoardAllocated())
+	{
+		return -1;
+	}
+
 	srand(time(NULL));
 
 	//Zero out array
-	for (int x = 0; x < BOARD_SIZE; x++)
+	for (int x = 0; x < boardSize; x++)
 	{
-		for (int y = 0; y < BOARD_SIZE; y++)
+		for (int y = 0; y < boardSize; y++)
 		{
-			playSpace[y][x] = 0;
+			playSpace[BoardIndex(x, y)] = 0;
 		}
 	}
 
@@ -559,7 +637,7 @@ int main()
 	{
 		PlayAIMove();
 		PrintBoard();
-		if(CheckGameOver())
+		if (CheckGameOver())
 		{
 			break;
 		}
@@ -568,7 +646,7 @@ int main()
 
 		while (true)
 		{
-			if(RunCursor())
+			if (RunCursor())
 			{
 				Vec2 v2(cursorX, cursorY);
 
@@ -576,16 +654,25 @@ int main()
 				{
 					break;
 				}
+
+#ifdef BEEP
+				Beep(600, 100);
+#endif
 			}
 		}
 
-		playSpace[cursorY][cursorX] = MOVE::X;
+		playSpace[BoardIndex(cursorX, cursorY)] = MOVE::X;
 
 		PrintBoard();
 		if (CheckGameOver())
 		{
 			break;
 		}
+	}
+
+	if (playSpace)
+	{
+		delete[] playSpace;
 	}
 
 	return 0;
