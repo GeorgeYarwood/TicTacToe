@@ -9,7 +9,7 @@
 //Allow selection with cursor
 //Multiplayer?
 
-#define BOARD_SIZE 3
+#define BOARD_SIZE 16
 int playSpace[BOARD_SIZE][BOARD_SIZE];
 
 #define RETURN_KEY 13
@@ -18,6 +18,8 @@ int playSpace[BOARD_SIZE][BOARD_SIZE];
 #define ARROW_DOWN 80
 #define ARROW_LEFT 75
 #define ARROW_RIGHT 77
+
+//#define PRINT_GRID
 
 int cursorX = 0, cursorY = 0;
 
@@ -95,10 +97,10 @@ void PrintBoard()
 {
 	system("cls");
 
+#ifdef PRINT_GRID
 	std::cout << "  X ";
 
 	//Print the top board values
-
 	for (int x = 0; x < BOARD_SIZE; x++)
 	{
 		std::cout << x + 1 << "  ";
@@ -106,13 +108,18 @@ void PrintBoard()
 
 	std::cout << std::endl;
 	std::cout << "Y ";
+#endif
+
 	std::cout << std::endl;
 
 	for (int y = 0; y < BOARD_SIZE; y++)
 	{
 		//Print the side board values
+#ifdef PRINT_GRID
 		std::cout << y + 1 << GetSpaceFromHighestVal(y + 1);
-
+#else
+		std::cout << " ";
+#endif
 		for (int x = 0; x < BOARD_SIZE; x++)
 		{
 			MOVE blockState = (MOVE)playSpace[y][x];
@@ -141,6 +148,7 @@ void PrintBoard()
 				}
 			}
 
+#ifdef PRINT_GRID
 			std::string dynamicSpace = DynamicSpace(x + 2);
 
 			if (isCursor)
@@ -151,6 +159,9 @@ void PrintBoard()
 			}
 
 			std::cout << dynamicSpace;
+#else
+			std::cout << (isCursor ? "]" : " ");
+#endif
 		}
 
 		std::cout << std::endl;
